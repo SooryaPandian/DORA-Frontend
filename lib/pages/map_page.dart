@@ -1,12 +1,10 @@
 // pages/map_page.dart
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 class MapPage extends StatefulWidget {
-  // Accept the map of users from the location page.
-  final Map<String, dynamic> users;        // { user_id: {role, last_location} }
-  final Map<String, String> usernames;     // { user_id: username }
+  final Map<String, dynamic> users;
+  final Map<String, String> usernames;
   const MapPage({super.key, required this.users, required this.usernames});
 
   @override
@@ -14,20 +12,14 @@ class MapPage extends StatefulWidget {
 }
 
 class _MapPageState extends State<MapPage> {
-  late final MapController _mapController;
-  List<Marker> _markers = [];
+  // Use a Completer to get a reference to the GoogleMapController.
+  late GoogleMapController _mapController;
+  Set<Marker> _markers = {};
 
   @override
   void initState() {
     super.initState();
-    _mapController = MapController();
     _buildMarkers();
-  }
-
-  @override
-  void dispose() {
-    _mapController.dispose();
-    super.dispose();
   }
 
   @override
@@ -42,7 +34,7 @@ class _MapPageState extends State<MapPage> {
   }
 
   void _buildMarkers() {
-    List<Marker> markers = [];
+    Set<Marker> markers = {};
     widget.users.forEach((userId, userData) {
       if (userData != null) {
         final role = userData["role"] ?? "member";
@@ -51,63 +43,18 @@ class _MapPageState extends State<MapPage> {
         if (loc != null && loc["lat"] != null && loc["lng"] != null) {
           final lat = (loc["lat"] as num).toDouble();
           final lng = (loc["lng"] as num).toDouble();
-          final timestamp = loc["timestamp"] ?? "";
           final username = widget.usernames[userId] ?? userId;
 
           markers.add(
             Marker(
-              point: LatLng(lat, lng),
-              width: 140,
-              height: 100,
-              alignment: Alignment.topCenter,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.location_pin,
-                    color: role == "admin" ? Colors.blue : Colors.red,
-                    size: 40,
-                  ),
-                  Container(
-                    margin: const EdgeInsets.only(top: 2),
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(6),
-                      boxShadow: const [
-                        BoxShadow(
-                          color: Colors.black26,
-                          blurRadius: 3,
-                          spreadRadius: 1,
-                        )
-                      ],
-                    ),
-                    child: Column(
-                      children: [
-                        Text(
-                          username,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                          ),
-                        ),
-                        if (role == "admin")
-                          Text(
-                            "Admin",
-                            style: const TextStyle(
-                              fontSize: 11,
-                              color: Colors.blue,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        Text(
-                          timestamp,
-                          style: const TextStyle(fontSize: 10),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+              markerId: MarkerId(userId), // Use a unique ID for the marker
+              position: LatLng(lat, lng),
+              infoWindow: InfoWindow(
+                title: "$username ($role)",
+                snippet: "Lat: $lat, Lng: $lng",
+              ),
+              icon: BitmapDescriptor.defaultMarkerWithHue(
+                role == "admin" ? BitmapDescriptor.hueBlue : BitmapDescriptor.hueRed,
               ),
             ),
           );
@@ -119,21 +66,31 @@ class _MapPageState extends State<MapPage> {
 
   void _fitBoundsToMarkers() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_markers.isEmpty || !mounted) return;
+      if (_markers.isEmpty) return;
 
-      final points = _markers.map((m) => m.point).toList();
-      final uniquePoints = Set<LatLng>.from(points);
+      final points = _markers.map((m) => m.position).toList();
 
-      if (uniquePoints.length > 1) {
-        final bounds = LatLngBounds.fromPoints(points);
-        _mapController.fitCamera(
-          CameraFit.bounds(
-            bounds: bounds,
-            padding: const EdgeInsets.all(50.0),
+      if (points.length > 1) {
+        final bounds = LatLngBounds(
+          southwest: LatLng(
+            points.map((p) => p.latitude).reduce((a, b) => a < b ? a : b),
+            points.map((p) => p.longitude).reduce((a, b) => a < b ? a : b),
+          ),
+          northeast: LatLng(
+            points.map((p) => p.latitude).reduce((a, b) => a > b ? a : b),
+            points.map((p) => p.longitude).reduce((a, b) => a > b ? a : b),
           ),
         );
-      } else if (uniquePoints.isNotEmpty) {
-        _mapController.move(uniquePoints.first, 15.0);
+        _mapController.animateCamera(CameraUpdate.newLatLngBounds(bounds, 50));
+      } else if (points.isNotEmpty) {
+        _mapController.animateCamera(
+          CameraUpdate.newCameraPosition(
+            CameraPosition(
+              target: points.first,
+              zoom: 15,
+            ),
+          ),
+        );
       }
     });
   }
@@ -142,23 +99,18 @@ class _MapPageState extends State<MapPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text("Map View")),
-      body: FlutterMap(
-        mapController: _mapController,
-        options: MapOptions(
-          initialCenter: const LatLng(20.5937, 78.9629),
-          initialZoom: 5.0,
-          onMapReady: () {
-            _fitBoundsToMarkers();
-          },
+      body: GoogleMap(
+        initialCameraPosition: const CameraPosition(
+          target: LatLng(20.5937, 78.9629), // Center on India
+          zoom: 5.0,
         ),
-        children: [
-          TileLayer(
-            urlTemplate: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-            subdomains: const ['a', 'b', 'c'],
-            userAgentPackageName: 'dev.yourcompany.yourappname',
-          ),
-          MarkerLayer(markers: _markers),
-        ],
+        onMapCreated: (controller) {
+          _mapController = controller;
+          _fitBoundsToMarkers();
+        },
+        markers: _markers,
+        myLocationEnabled: true,
+        myLocationButtonEnabled: true,
       ),
     );
   }

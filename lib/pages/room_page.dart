@@ -3,8 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
-import 'location_page.dart';
-
+import 'room_home_page.dart';
 class RoomPage extends StatefulWidget {
   @override
   _RoomPageState createState() => _RoomPageState();
@@ -34,7 +33,7 @@ class _RoomPageState extends State<RoomPage> {
 
     if (res.statusCode == 200) {
       final data = jsonDecode(res.body);
-      _goToLocationPage(data["room_code"]);
+      _goToRoomHomePage(data["room_code"]);
     } else {
       _showError("Failed to create room");
     }
@@ -54,16 +53,20 @@ class _RoomPageState extends State<RoomPage> {
     );
 
     if (res.statusCode == 200) {
-      _goToLocationPage(_joinCode.text);
+      _goToRoomHomePage(_joinCode.text);
     } else {
       _showError("Failed to join room");
     }
   }
 
-  void _goToLocationPage(String code) {
+  void _goToRoomHomePage(String code) {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => LocationPage(roomCode: code)),
+      MaterialPageRoute(
+        builder: (_) => RoomHomePage(
+          roomCode: code, // will be updated later by socket
+        ),
+      ),
     );
   }
 
