@@ -29,7 +29,7 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         manifestPlaceholders = [
-                API_KEY: API_KEY
+                API_KEY: map_api_key
         ]
     }
 

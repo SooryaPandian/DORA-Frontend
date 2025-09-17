@@ -19,7 +19,6 @@
 
     <application
         android:label="location_sharing"
-        android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <meta-data
             android:name="com.google.android.geo.API_KEY"
