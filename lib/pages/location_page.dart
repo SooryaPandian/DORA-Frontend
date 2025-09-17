@@ -10,7 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'register_page.dart';
 import 'map_page.dart';
-
+import 'chat_page.dart';
 class LocationPage extends StatefulWidget {
   final String roomCode;
   LocationPage({required this.roomCode});
@@ -153,6 +153,18 @@ class _LocationPageState extends State<LocationPage> {
     locationTimer?.cancel();
     super.dispose();
   }
+  void _openChatPage() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ChatPage(
+          roomCode: widget.roomCode,
+          userMap: usernames, // pass hashmap from location page
+        ),
+      ),
+    );
+
+  }
 
   void _openMapPage() {
     Navigator.push(
@@ -173,6 +185,10 @@ class _LocationPageState extends State<LocationPage> {
         title: Text("Room: ${widget.roomCode}"),
         actions: [
           IconButton(icon: Icon(Icons.map), onPressed: _openMapPage),
+          IconButton(
+            icon: Icon(Icons.chat),
+            onPressed: _openChatPage,
+          ),
           refreshing
               ? Padding(
             padding: EdgeInsets.only(right: 16),
