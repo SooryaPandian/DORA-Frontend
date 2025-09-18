@@ -7,6 +7,7 @@ class LocationPage extends StatelessWidget {
   final Map<String, dynamic> users;
   final Map<String, String> usernames;
   final bool loading;
+  final String tripStatus; // <- get from parent (RoomHomePage)
 
   const LocationPage({
     super.key,
@@ -14,6 +15,7 @@ class LocationPage extends StatelessWidget {
     required this.users,
     required this.usernames,
     required this.loading,
+    required this.tripStatus,
   });
 
   void _openMapPage(BuildContext context) {
@@ -27,6 +29,27 @@ class LocationPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (tripStatus == "upcoming") {
+      return const Center(
+        child: Text(
+          "Start the trip to track your colleagues live...",
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
+          textAlign: TextAlign.center,
+        ),
+      );
+    }
+
+    if (tripStatus == "finished") {
+      return const Center(
+        child: Text(
+          "Trip has ended.",
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
+          textAlign: TextAlign.center,
+        ),
+      );
+    }
+
+    // Ongoing trip
     return loading
         ? const Center(child: CircularProgressIndicator())
         : users.isEmpty
@@ -45,7 +68,8 @@ class LocationPage extends StatelessWidget {
                 subtitle: loc == null
                     ? const Text("No location shared yet")
                     : Text(
-                    "Lat: ${loc["lat"]}, Lng: ${loc["lng"]}\nUpdated: ${loc["timestamp"]}"),
+                  "Lat: ${loc["lat"]}, Lng: ${loc["lng"]}\nUpdated: ${loc["timestamp"]}",
+                ),
               );
             }).toList(),
           ),

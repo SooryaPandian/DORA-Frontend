@@ -7,9 +7,7 @@ import 'package:socket_io_client/socket_io_client.dart' as IO;
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:vibration/vibration.dart';
-
 import 'chat_page.dart';
-import 'map_page.dart';
 import 'location_page.dart';
 import 'sos_page.dart';
 
@@ -24,11 +22,17 @@ class RoomHomePage extends StatefulWidget {
 class _RoomHomePageState extends State<RoomHomePage>
     with SingleTickerProviderStateMixin {
   IO.Socket? socket;
-  Map<String, dynamic> users = {}; // { user_id: {role, last_location} }
-  Map<String, String> usernames = {}; // { user_id: username }
+  Map<String, dynamic> users = {};
+  Map<String, String> usernames = {};
   String? myRole;
   String? myUserId;
+
   Timer? locationTimer;
+  Timer? tripTimer;
+  Duration tripDuration = Duration.zero;
+  DateTime? tripStartTime;
+
+  String tripStatus = "upcoming"; // upcoming | ongoing | finished
   bool loading = true;
 
   int _selectedIndex = 0;
@@ -40,19 +44,18 @@ class _RoomHomePageState extends State<RoomHomePage>
     "SOS",
   ];
 
-  // SOS state
+  // SOS
   List<Map<String, dynamic>> sosLogs = [];
   bool mySOSActive = false;
 
-  // Animation for blinking SOS alerts
   late AnimationController _blinkController;
   late Animation<double> _blinkAnimation;
 
   @override
   void initState() {
     super.initState();
+    _fetchRoomDetails(); // fetch initial details
     _connectSocket();
-    _startLocationUpdates();
 
     _blinkController = AnimationController(
       vsync: this,
@@ -62,6 +65,52 @@ class _RoomHomePageState extends State<RoomHomePage>
     _blinkAnimation =
         Tween<double>(begin: 1.0, end: 0.3).animate(_blinkController);
   }
+
+  // Fetch initial room details
+  Future<void> _fetchRoomDetails() async {
+    final prefs = await SharedPreferences.getInstance();
+    final server = prefs.getString("server_ip") ?? "";
+    try {
+      final res = await http.get(Uri.parse("$server/room_details/${widget.roomCode}"));
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+
+        setState(() {
+          // // ✅ Update members if backend sends them
+          // if (data["members"] != null) {
+          //   _updateMembers(List<Map<String, dynamic>>.from(data["members"]));
+          // }
+
+          // ✅ Trip status
+          tripStatus = data["status"] ?? "upcoming";
+
+          if (tripStatus == "ongoing" && data["start_date"] != null) {
+            tripStartTime = DateTime.tryParse(data["start_date"]);
+            if (tripStartTime != null) {
+              _startTripTimer();
+            }
+          }
+
+
+          if (tripStatus == "finished") {
+            tripStartTime = null;
+            tripDuration = Duration.zero;
+          }
+
+          // ✅ Optional: Handle end_date if you need it
+          if (data["end_date"] != null) {
+            final endDate = DateTime.tryParse(data["end_date"]);
+            if (endDate != null && tripStartTime != null) {
+              tripDuration = endDate.difference(tripStartTime!);
+            }
+          }
+        });
+      }
+    } catch (e) {
+      print("Room details fetch error: $e");
+    }
+  }
+
 
   void _connectSocket() async {
     final prefs = await SharedPreferences.getInstance();
@@ -85,7 +134,6 @@ class _RoomHomePageState extends State<RoomHomePage>
       setState(() => loading = false);
     });
 
-    // === Location ===
     socket!.on("members_update", (data) {
       _updateMembers(data["members"]);
     });
@@ -94,13 +142,41 @@ class _RoomHomePageState extends State<RoomHomePage>
       _updateMembers(data["members"]);
     });
 
-    // === SOS Events ===
     socket!.on("sos_alert", (data) {
       _handleSosAlert(data);
     });
 
     socket!.on("sos_stopped", (data) {
       _handleSosStop(data);
+    });
+
+    socket!.on("trip_started", (data) {
+      DateTime? start;
+      final ts = data["timestamp"];
+
+      if (ts is int) {
+        // backend sent epoch milliseconds
+        start = DateTime.fromMillisecondsSinceEpoch(ts);
+      } else if (ts is String) {
+        // backend sent ISO8601 string
+        start = DateTime.tryParse(ts);
+      }
+
+      setState(() {
+        tripStatus = "ongoing";
+        tripStartTime = start ?? DateTime.now();
+      });
+
+      _startTripTimer();
+    });
+
+
+    socket!.on("trip_ended", (_) {
+      setState(() {
+        tripStatus = "finished";
+      });
+      tripTimer?.cancel();
+      locationTimer?.cancel();
     });
   }
 
@@ -137,17 +213,60 @@ class _RoomHomePageState extends State<RoomHomePage>
     }
   }
 
-  void _startLocationUpdates() async {
-    final prefs = await SharedPreferences.getInstance();
-    final userId = prefs.getString("user_id") ?? "";
+  // ========= Trip Control =========
+  void _startTrip() async {
+    if (tripStatus == "ongoing") return;
 
+    final prefs = await SharedPreferences.getInstance();
+    final server = prefs.getString("server_ip") ?? "";
+    final res = await http.post(Uri.parse("$server/start_trip/${widget.roomCode}"));
+
+    if (res.statusCode == 200) {
+      setState(() {
+        tripStatus = "ongoing";
+        tripStartTime = DateTime.now(); // until backend confirms
+      });
+      _startTripTimer();
+      _startLocationUpdates();
+    }
+  }
+
+  void _endTrip() async {
+    if (tripStatus != "ongoing") return;
+
+    final prefs = await SharedPreferences.getInstance();
+    final server = prefs.getString("server_ip") ?? "";
+    final res = await http.post(Uri.parse("$server/end_trip/${widget.roomCode}"));
+
+    if (res.statusCode == 200) {
+      setState(() {
+        tripStatus = "finished";
+      });
+      tripTimer?.cancel();
+      locationTimer?.cancel();
+    }
+  }
+
+  void _startTripTimer() {
+    tripTimer?.cancel();
+    if (tripStartTime != null) {
+      tripTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+        setState(() {
+          tripDuration = DateTime.now().difference(tripStartTime!);
+        });
+      });
+    }
+  }
+
+  void _startLocationUpdates() {
+    locationTimer?.cancel();
     locationTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
       try {
         Position pos = await Geolocator.getCurrentPosition(
           desiredAccuracy: LocationAccuracy.high,
         );
         socket?.emit("send_location", {
-          "user_id": userId,
+          "user_id": myUserId,
           "room_code": widget.roomCode,
           "role": myRole ?? "member",
           "lat": pos.latitude,
@@ -159,7 +278,7 @@ class _RoomHomePageState extends State<RoomHomePage>
     });
   }
 
-  // === SOS handling ===
+  // ========= SOS =========
   void _toggleSOS() {
     if (mySOSActive) {
       _stopSOS();
@@ -200,12 +319,10 @@ class _RoomHomePageState extends State<RoomHomePage>
       });
     });
 
-    // Vibrate device
     if (await Vibration.hasVibrator() ?? false) {
       Vibration.vibrate(pattern: [0, 500, 250, 500, 250, 500], repeat: 0);
     }
 
-    // Show popup
     if (mounted) {
       showDialog(
         context: context,
@@ -216,7 +333,7 @@ class _RoomHomePageState extends State<RoomHomePage>
             TextButton(
               onPressed: () {
                 Navigator.pop(context);
-                Vibration.cancel(); // ✅ stop vibration when closing popup
+                Vibration.cancel();
               },
               child: const Text("Close"),
             ),
@@ -246,6 +363,7 @@ class _RoomHomePageState extends State<RoomHomePage>
     socket?.disconnect();
     socket?.dispose();
     locationTimer?.cancel();
+    tripTimer?.cancel();
     _blinkController.dispose();
     super.dispose();
   }
@@ -262,6 +380,7 @@ class _RoomHomePageState extends State<RoomHomePage>
         users: users,
         usernames: usernames,
         loading: loading,
+        tripStatus: tripStatus,
       ),
       ChatPage(roomCode: widget.roomCode, userMap: usernames),
       _buildFeaturesPage(),
@@ -274,16 +393,25 @@ class _RoomHomePageState extends State<RoomHomePage>
 
     return Scaffold(
       appBar: AppBar(
-        title: Text("Room: ${widget.roomCode} - ${_titles[_selectedIndex]}"),
+        title: Text(
+            "Room: ${widget.roomCode} - ${_titles[_selectedIndex]} (${tripStatus.toUpperCase()})"),
+        actions: [
+          if (tripStatus == "ongoing")
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Center(
+                  child: Text(
+                    _formatDuration(tripDuration),
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  )),
+            )
+        ],
       ),
       body: pages[_selectedIndex],
       bottomNavigationBar: BottomNavigationBar(
         type: BottomNavigationBarType.fixed,
         currentIndex: _selectedIndex,
         onTap: _onItemTapped,
-        backgroundColor: Colors.white, // background of navbar
-        selectedItemColor: Colors.blue, // active icon color
-        unselectedItemColor: Colors.grey, // inactive icon color
         items: const [
           BottomNavigationBarItem(
             icon: Icon(Icons.location_on),
@@ -303,7 +431,6 @@ class _RoomHomePageState extends State<RoomHomePage>
           ),
         ],
       ),
-
     );
   }
 
@@ -311,42 +438,35 @@ class _RoomHomePageState extends State<RoomHomePage>
     return GridView.count(
       crossAxisCount: 2,
       padding: const EdgeInsets.all(16),
-      children: [
-        _featureButton(Icons.travel_explore, "Travel Plan", () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Travel Plan tapped")),
-          );
-        }),
-        _featureButton(Icons.play_arrow, "Start Trip", () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Trip Started")),
-          );
-        }),
-        _featureButton(Icons.stop, "End Trip", () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Trip Ended")),
-          );
-        }),
-      ],
+        children: [
+          if (tripStatus == "upcoming")
+            ElevatedButton.icon(
+              onPressed: _startTrip,
+              icon: const Icon(Icons.play_arrow),
+              label: const Text("Start Trip"),
+            )
+          else if (tripStatus == "ongoing")
+            ElevatedButton.icon(
+              onPressed: _endTrip,
+              icon: const Icon(Icons.stop),
+              label: const Text("End Trip"),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            )
+          else if (tripStatus == "finished")
+              const Text(
+                "✅ Trip has ended",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+
+        ],
     );
   }
 
-  Widget _featureButton(IconData icon, String label, VoidCallback onTap) {
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: onTap,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 48, color: Colors.blue),
-            const SizedBox(height: 8),
-            Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
-          ],
-        ),
-      ),
-    );
+  String _formatDuration(Duration d) {
+    String twoDigits(int n) => n.toString().padLeft(2, "0");
+    final h = twoDigits(d.inHours);
+    final m = twoDigits(d.inMinutes.remainder(60));
+    final s = twoDigits(d.inSeconds.remainder(60));
+    return "$h:$m:$s";
   }
 }
