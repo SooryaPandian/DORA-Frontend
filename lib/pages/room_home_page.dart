@@ -10,7 +10,7 @@ import 'package:vibration/vibration.dart';
 import 'chat_page.dart';
 import 'location_page.dart';
 import 'sos_page.dart';
-
+import 'trip_plan_page.dart';
 class RoomHomePage extends StatefulWidget {
   final String roomCode;
   const RoomHomePage({super.key, required this.roomCode});
@@ -385,6 +385,7 @@ class _RoomHomePageState extends State<RoomHomePage>
       ChatPage(roomCode: widget.roomCode, userMap: usernames),
       _buildFeaturesPage(),
       SOSPage(
+        roomCode: widget.roomCode,
         sosLogs: sosLogs,
         mySOSActive: mySOSActive,
         onToggleSOS: _toggleSOS,
@@ -438,29 +439,41 @@ class _RoomHomePageState extends State<RoomHomePage>
     return GridView.count(
       crossAxisCount: 2,
       padding: const EdgeInsets.all(16),
-        children: [
-          if (tripStatus == "upcoming")
-            ElevatedButton.icon(
-              onPressed: _startTrip,
-              icon: const Icon(Icons.play_arrow),
-              label: const Text("Start Trip"),
-            )
-          else if (tripStatus == "ongoing")
-            ElevatedButton.icon(
-              onPressed: _endTrip,
-              icon: const Icon(Icons.stop),
-              label: const Text("End Trip"),
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            )
-          else if (tripStatus == "finished")
-              const Text(
-                "✅ Trip has ended",
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+      children: [
+        ElevatedButton.icon(
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => TripPlanPage(roomCode: widget.roomCode),
               ),
-
-        ],
+            );
+          },
+          icon: const Icon(Icons.map),
+          label: const Text("Travel Plan"),
+        ),
+        if (tripStatus == "upcoming")
+          ElevatedButton.icon(
+            onPressed: _startTrip,
+            icon: const Icon(Icons.play_arrow),
+            label: const Text("Start Trip"),
+          )
+        else if (tripStatus == "ongoing")
+          ElevatedButton.icon(
+            onPressed: _endTrip,
+            icon: const Icon(Icons.stop),
+            label: const Text("End Trip"),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+          )
+        else if (tripStatus == "finished")
+            const Text(
+              "✅ Trip has ended",
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+      ],
     );
   }
+
 
   String _formatDuration(Duration d) {
     String twoDigits(int n) => n.toString().padLeft(2, "0");
