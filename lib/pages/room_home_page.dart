@@ -83,7 +83,9 @@ class _RoomHomePageState extends State<RoomHomePage>
 
           // ✅ Trip status
           tripStatus = data["status"] ?? "upcoming";
-
+          if (tripStatus == "ongoing"){
+            _startLocationUpdates();
+          }
           if (tripStatus == "ongoing" && data["start_date"] != null) {
             tripStartTime = DateTime.tryParse(data["start_date"]);
             if (tripStartTime != null) {
