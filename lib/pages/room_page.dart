@@ -10,9 +10,10 @@ class RoomPage extends StatefulWidget {
   _RoomPageState createState() => _RoomPageState();
 }
 
-class _RoomPageState extends State<RoomPage> {
+class _RoomPageState extends State<RoomPage> with SingleTickerProviderStateMixin {
   final TextEditingController _roomName = TextEditingController();
   final TextEditingController _joinCode = TextEditingController();
+  late TabController _tabController;
 
   List<dynamic> _rooms = [];
   bool _loadingRooms = true;
@@ -20,7 +21,14 @@ class _RoomPageState extends State<RoomPage> {
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this);
     _fetchUserRooms();
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
   }
 
   Future<void> _fetchUserRooms() async {
@@ -99,59 +107,257 @@ class _RoomPageState extends State<RoomPage> {
   }
 
   void _showError(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: Colors.red.shade400,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   Color _getStatusColor(String status) {
     switch (status) {
       case "ongoing":
-        return Colors.green.shade100;
+        return Colors.green.shade50;
       case "finished":
-        return Colors.red.shade100;
+        return Colors.grey.shade50;
       default:
-        return Colors.blue.shade100;
+        return Colors.blue.shade50;
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text("Create / Join Room")),
-      body: SingleChildScrollView(
+  Color _getStatusAccentColor(String status) {
+    switch (status) {
+      case "ongoing":
+        return Colors.green;
+      case "finished":
+        return Colors.grey;
+      default:
+        return Colors.blue;
+    }
+  }
+
+  IconData _getStatusIcon(String status) {
+    switch (status) {
+      case "ongoing":
+        return Icons.play_circle_filled;
+      case "finished":
+        return Icons.check_circle;
+      default:
+        return Icons.schedule;
+    }
+  }
+
+  Widget _buildCreateRoomTab() {
+    return SingleChildScrollView(
+      padding: EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Icon(
+            Icons.add_circle_outline,
+            size: 80,
+            color: Theme.of(context).primaryColor.withOpacity(0.7),
+          ),
+          SizedBox(height: 24),
+          Text(
+            "Create a New Room",
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: Theme.of(context).primaryColor,
+            ),
+          ),
+          SizedBox(height: 8),
+          Text(
+            "Start a new session and invite others to join",
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: Colors.grey.shade600,
+            ),
+          ),
+          SizedBox(height: 32),
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 10,
+                  offset: Offset(0, 4),
+                ),
+              ],
+            ),
+            child: TextField(
+              controller: _roomName,
+              decoration: InputDecoration(
+                labelText: "Room Name",
+                prefixIcon: Icon(Icons.meeting_room),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+                filled: true,
+                fillColor: Colors.white,
+                contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+              ),
+            ),
+          ),
+          SizedBox(height: 24),
+          ElevatedButton.icon(
+            onPressed: _createRoom,
+            icon: Icon(Icons.add),
+            label: Text("Create Room"),
+            style: ElevatedButton.styleFrom(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              elevation: 2,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildJoinRoomTab() {
+    return SingleChildScrollView(
+      padding: EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Icon(
+            Icons.login,
+            size: 80,
+            color: Theme.of(context).primaryColor.withOpacity(0.7),
+          ),
+          SizedBox(height: 24),
+          Text(
+            "Join an Existing Room",
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: Theme.of(context).primaryColor,
+            ),
+          ),
+          SizedBox(height: 8),
+          Text(
+            "Enter the room code to join an ongoing session",
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: Colors.grey.shade600,
+            ),
+          ),
+          SizedBox(height: 32),
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 10,
+                  offset: Offset(0, 4),
+                ),
+              ],
+            ),
+            child: TextField(
+              controller: _joinCode,
+              decoration: InputDecoration(
+                labelText: "Room Code",
+                prefixIcon: Icon(Icons.vpn_key),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+                filled: true,
+                fillColor: Colors.white,
+                contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+              ),
+              textCapitalization: TextCapitalization.characters,
+            ),
+          ),
+          SizedBox(height: 24),
+          ElevatedButton.icon(
+            onPressed: _joinRoom,
+            icon: Icon(Icons.login),
+            label: Text("Join Room"),
+            style: ElevatedButton.styleFrom(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              elevation: 2,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRoomsList() {
+    return RefreshIndicator(
+      onRefresh: _fetchUserRooms,
+      child: SingleChildScrollView(
+        physics: AlwaysScrollableScrollPhysics(),
         padding: EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Create / Join section
-            TextField(
-              controller: _roomName,
-              decoration: InputDecoration(labelText: "Room Name"),
+            Row(
+              children: [
+                Icon(Icons.history, color: Theme.of(context).primaryColor),
+                SizedBox(width: 8),
+                Text(
+                  "Your Rooms",
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
             ),
-            SizedBox(height: 8),
-            ElevatedButton(
-              onPressed: _createRoom,
-              child: Text("Create Room"),
-            ),
-            Divider(),
-            TextField(
-              controller: _joinCode,
-              decoration: InputDecoration(labelText: "Room Code"),
-            ),
-            SizedBox(height: 8),
-            ElevatedButton(
-              onPressed: _joinRoom,
-              child: Text("Join Room"),
-            ),
-            SizedBox(height: 24),
-
-            // Room list
-            Text("Your Rooms",
-                style: Theme.of(context).textTheme.headlineMedium),
-            SizedBox(height: 12),
+            SizedBox(height: 16),
             _loadingRooms
-                ? Center(child: CircularProgressIndicator())
+                ? Center(
+              child: Column(
+                children: [
+                  SizedBox(height: 50),
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text("Loading your rooms..."),
+                ],
+              ),
+            )
                 : _rooms.isEmpty
-                ? Text("No rooms joined yet.")
+                ? Center(
+              child: Column(
+                children: [
+                  SizedBox(height: 50),
+                  Icon(
+                    Icons.inbox_outlined,
+                    size: 80,
+                    color: Colors.grey.shade400,
+                  ),
+                  SizedBox(height: 16),
+                  Text(
+                    "No rooms joined yet",
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    "Create or join a room to get started",
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Colors.grey.shade500,
+                    ),
+                  ),
+                ],
+              ),
+            )
                 : Column(
               children: _rooms.map((room) {
                 final status = room["status"];
@@ -160,25 +366,96 @@ class _RoomPageState extends State<RoomPage> {
                 final createdAt = room["created_at"];
 
                 String subtitle = "";
+                String timeInfo = "";
                 if (status == "ongoing" && startDate != null) {
-                  subtitle = "Started: ${DateTime.parse(startDate).toLocal()}";
+                  final start = DateTime.parse(startDate).toLocal();
+                  subtitle = "Started";
+                  timeInfo = "${start.day}/${start.month}/${start.year} at ${start.hour}:${start.minute.toString().padLeft(2, '0')}";
                 } else if (status == "finished" && startDate != null) {
-                  subtitle =
-                  "Started: ${DateTime.parse(startDate).toLocal()}\nEnded: ${endDate != null ? DateTime.parse(endDate).toLocal() : "N/A"}";
+                  final start = DateTime.parse(startDate).toLocal();
+                  subtitle = "Completed";
+                  timeInfo = "${start.day}/${start.month}/${start.year}";
+                  if (endDate != null) {
+                    final end = DateTime.parse(endDate).toLocal();
+                    timeInfo += " - ${end.day}/${end.month}/${end.year}";
+                  }
                 } else if (status == "upcoming") {
-                  subtitle = "Created: ${DateTime.parse(createdAt).toLocal()}";
+                  final created = DateTime.parse(createdAt).toLocal();
+                  subtitle = "Created";
+                  timeInfo = "${created.day}/${created.month}/${created.year} at ${created.hour}:${created.minute.toString().padLeft(2, '0')}";
                 }
 
-                return Card(
-                  color: _getStatusColor(status),
-                  child: ListTile(
-                    title: Text(room["name"]),
-                    subtitle: Text(subtitle),
-                    trailing: Text(
-                      status.toUpperCase(),
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
+                return Container(
+                  margin: EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(
+                    color: _getStatusColor(status),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: _getStatusAccentColor(status).withOpacity(0.2),
+                      width: 1.5,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 8,
+                        offset: Offset(0, 2),
                       ),
+                    ],
+                  ),
+                  child: ListTile(
+                    contentPadding: EdgeInsets.all(16),
+                    leading: Container(
+                      padding: EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: _getStatusAccentColor(status).withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(
+                        _getStatusIcon(status),
+                        color: _getStatusAccentColor(status),
+                        size: 24,
+                      ),
+                    ),
+                    title: Text(
+                      room["name"],
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 16,
+                      ),
+                    ),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(height: 4),
+                        Text(
+                          "$subtitle: $timeInfo",
+                          style: TextStyle(
+                            color: Colors.grey.shade600,
+                            fontSize: 13,
+                          ),
+                        ),
+                        SizedBox(height: 8),
+                        Container(
+                          padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: _getStatusAccentColor(status).withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            status.toUpperCase(),
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 11,
+                              color: _getStatusAccentColor(status),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    trailing: Icon(
+                      Icons.arrow_forward_ios,
+                      color: Colors.grey.shade400,
+                      size: 16,
                     ),
                     onTap: () => _goToRoomHomePage(room["code"]),
                   ),
@@ -187,6 +464,50 @@ class _RoomPageState extends State<RoomPage> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.grey.shade50,
+      appBar: AppBar(
+        title: Text(
+          "Rooms",
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        elevation: 0,
+        backgroundColor: Theme.of(context).primaryColor,
+        foregroundColor: Colors.white,
+        bottom: TabBar(
+          controller: _tabController,
+          indicatorColor: Colors.white,
+          labelColor: Colors.white,
+          unselectedLabelColor: Colors.white.withOpacity(0.7),
+          tabs: [
+            Tab(icon: Icon(Icons.add), text: "Create"),
+            Tab(icon: Icon(Icons.login), text: "Join"),
+          ],
+        ),
+      ),
+      body: Column(
+        children: [
+          Expanded(
+            flex: 2,
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                _buildCreateRoomTab(),
+                _buildJoinRoomTab(),
+              ],
+            ),
+          ),
+          Expanded(
+            flex: 3,
+            child: _buildRoomsList(),
+          ),
+        ],
       ),
     );
   }
